@@ -17,6 +17,7 @@ import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified
 import se.michaelthelin.spotify.model_objects.specification.PlaylistTrack
 import se.michaelthelin.spotify.model_objects.specification.Track
 import se.michaelthelin.spotify.requests.authorization.authorization_code.AuthorizationCodeUriRequest
+import se.michaelthelin.spotify.requests.data.player.StartResumeUsersPlaybackRequest
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.InputStreamReader
@@ -212,11 +213,24 @@ object SpotifyService {
         }
     }
 
+    /**
+     * Starts or resumes playback for the given URI. (Not currently supported by Spotify API)
+     * @param uri The URI of the context to play. Valid URIs include playlists, albums, and artists.
+     * @return A [StartResumeUsersPlaybackRequest.Builder] to build and execute the request.
+     */
+    private fun startResumePlaybackForUri(uri: String): StartResumeUsersPlaybackRequest.Builder {
+        return StartResumeUsersPlaybackRequest.Builder(spotifyApi.accessToken)
+            .setDefaults(spotifyApi.httpManager, spotifyApi.scheme, spotifyApi.host, spotifyApi.port)
+            .context_uri(uri)
+    }
+
     fun playTrack(selectedTrackUri: String) {
+        // Workaround for the fact that Spotify API does not support playing a specific track by URI
         syncApiRequestLambda(
-            { uri -> spotifyApi.addItemToUsersPlaybackQueue(uri).build().execute() },
+            { uri ->  spotifyApi.addItemToUsersPlaybackQueue(uri!!).build().execute() },
             selectedTrackUri
         )
+        nextTrack()
     }
 
     fun pauseTrack() {
@@ -287,6 +301,15 @@ object SpotifyService {
         )?.get(0)
         if (isSaved == true) return CheckSongSavedInLibraryResponse.SONG_SAVED  // isSaved == true since it may be null
         return CheckSongSavedInLibraryResponse.SONG_NOT_SAVED
+    }
+
+    fun playPlaylist(selectedPlaylistUri: String) {
+        // Workaround for the fact that Spotify API does not support playing a specific track by URI
+        syncApiRequestLambda(
+            { uri ->  startResumePlaybackForUri(uri!!).build().execute() },
+            selectedPlaylistUri
+        )
+        nextTrack()
     }
 
     fun getPlaylists(): Paging<PlaylistSimplified>?{

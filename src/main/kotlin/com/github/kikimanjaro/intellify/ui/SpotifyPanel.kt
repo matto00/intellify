@@ -145,10 +145,25 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
 
         val playlistMenu = JPopupMenu()
         playlists.forEach { playlist: PlaylistSimplified ->
-            val menuItem = JMenuItem(playlist.name)
-            menuItem.addActionListener {
-                 openPlaylist(playlistMenu, playlist.id)
+            val panel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
+            val nameLabel = JLabel(playlist.name)
+            val openButton = JButton("Open")
+            openButton.addActionListener {
+                openPlaylist(playlistMenu, playlist.id, playlist.name)
             }
+            val playButton = JButton("Play")
+            playButton.addActionListener {
+                SpotifyService.playPlaylist(playlist.id)
+                playlistMenu.isVisible = false
+            }
+            panel.add(nameLabel)
+            panel.add(openButton)
+            panel.add(playButton)
+            panel.preferredSize = Dimension(250, 32)
+            val menuItem = JMenuItem()
+            menuItem.layout = BorderLayout()
+            menuItem.add(panel, BorderLayout.CENTER)
+            menuItem.preferredSize = Dimension(260, 40)
             playlistMenu.add(menuItem)
         }
 
@@ -169,7 +184,7 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
         }
     }
 
-    private fun openPlaylist(playlistMenu: JPopupMenu, playlistId: String) {
+    private fun openPlaylist(playlistMenu: JPopupMenu, playlistId: String, playlistName: String) {
         val songsForPlaylist = SpotifyService.getSongsForPlaylist(playlistId)?.items
         if (songsForPlaylist.isNullOrEmpty()) {
             JOptionPane.showMessageDialog(this, "No songs found in this playlist.", "Playlists", JOptionPane.INFORMATION_MESSAGE)
@@ -177,6 +192,13 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
         }
 
         val playlistSongMenu = JPopupMenu()
+
+        val titleLabel = JLabel("Select a song")
+        titleLabel.isEnabled = false
+        titleLabel.border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
+        playlistSongMenu.add(titleLabel)
+
+        playlistSongMenu.add(JSeparator())
         songsForPlaylist.forEach { playlistTrack: PlaylistTrack ->
             val track = playlistTrack.track
             val menuItem = JMenuItem(track.name)
@@ -188,9 +210,11 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
 
         if (playlistMenu.isVisible)
             playlistMenu.setVisible(false)
+
+        playlistSongMenu.show(this, 0, 0)
     }
 
-    fun playTrack(playlistSongMenu: JPopupMenu, trackUri: String) {
+    private fun playTrack(playlistSongMenu: JPopupMenu, trackUri: String) {
         SpotifyService.playTrack(trackUri)
 
         if (playlistSongMenu.isVisible)
