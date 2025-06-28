@@ -14,6 +14,9 @@ class SpotifyStatusUpdater(
     val pauseIcon: Icon = IconLoader.getIcon("/icons/pause.svg", this::class.java)
     val nextIcon: Icon = IconLoader.getIcon("/icons/next.svg", this::class.java)
     val prevIcon: Icon = IconLoader.getIcon("/icons/prev.svg", this::class.java)
+    val addIcon: Icon = IconLoader.getIcon("/icons/add.svg", this::class.java)
+    val greenCheckIcon: Icon = IconLoader.getIcon("/icons/greencheckmark.svg", this::class.java)
+    val playlistsIcon: Icon = IconLoader.getIcon("/icons/playlists.svg", this::class.java)
     val currentIcon: Icon
         get() = if (SpotifyService.title.isNotEmpty()) spotifyActiveIcon else spotifyInactiveIcon
 

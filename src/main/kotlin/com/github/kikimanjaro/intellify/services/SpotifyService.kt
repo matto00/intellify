@@ -12,6 +12,8 @@ import se.michaelthelin.spotify.SpotifyApi
 import se.michaelthelin.spotify.SpotifyHttpManager
 import se.michaelthelin.spotify.enums.AuthorizationScope
 import se.michaelthelin.spotify.exceptions.detailed.UnauthorizedException
+import se.michaelthelin.spotify.model_objects.specification.Paging
+import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified
 import se.michaelthelin.spotify.model_objects.specification.Track
 import se.michaelthelin.spotify.requests.authorization.authorization_code.AuthorizationCodeUriRequest
 import java.io.BufferedReader
@@ -23,6 +25,17 @@ import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletionException
 import kotlin.concurrent.thread
 
+enum class CheckSongSavedInLibraryResponse {
+    REQUEST_FAILED,
+    SONG_SAVED,
+    SONG_NOT_SAVED
+}
+
+enum class AddRemoveCurrentTrackFromLibraryResponse {
+    REQUEST_FAILED,
+    CURRENT_TRACK_ADDED_TO_LIBRARY,
+    CURRENT_TRACK_REMOVED_FROM_LIBRARY
+}
 
 object SpotifyService {
     var currentPanel: SpotifyPanel? = null
@@ -30,7 +43,7 @@ object SpotifyService {
     private const val accesServiceName = "Intellify-acces"
     private const val refreshServiceName = "Intellify-refresh"
     private val redirectUri =
-        SpotifyHttpManager.makeUri("http://localhost:30498/callback")
+        SpotifyHttpManager.makeUri("http://127.0.0.1:30498/callback")
     private val spotifyApi = SpotifyApi.Builder()
         .setClientId(clientId)
         .setClientSecret(clientSecret)
@@ -40,19 +53,29 @@ object SpotifyService {
         .build()
 
     private val authorizationCodeUriRqst = AuthorizationCodeUriRequest.Builder().client_id(clientId)
-        .redirect_uri(SpotifyHttpManager.makeUri("http://localhost:30498/callback")).show_dialog(true)
+        .redirect_uri(SpotifyHttpManager.makeUri("http://127.0.0.1:30498/callback")).show_dialog(true)
         .response_type("code").scope(
             AuthorizationScope.USER_LIBRARY_READ,
             AuthorizationScope.APP_REMOTE_CONTROL,
             AuthorizationScope.USER_READ_CURRENTLY_PLAYING,
             AuthorizationScope.USER_MODIFY_PLAYBACK_STATE,
-            AuthorizationScope.USER_TOP_READ
+            AuthorizationScope.USER_TOP_READ,
+            AuthorizationScope.USER_LIBRARY_MODIFY,
+            AuthorizationScope.PLAYLIST_READ_PRIVATE,
+            AuthorizationScope.PLAYLIST_READ_COLLABORATIVE,
+            AuthorizationScope.PLAYLIST_MODIFY_PRIVATE,
+            AuthorizationScope.PLAYLIST_MODIFY_PUBLIC,
         ).build()
     var code = retrieveCode()
+    var trackId = ""
+    var trackUri = ""
     var title = ""
     var artist = ""
     var song = ""
     var imageUrl = ""
+    var lastTrackCheckedInLibrary = ""
+
+    var playlists : Paging<PlaylistSimplified>? = null
 
     var durationMs = 0
     var progressInMs = 0
@@ -137,6 +160,8 @@ object SpotifyService {
                 if (currentlyPlayingContext.item is Track) {
                     isPlaying = currentlyPlayingContext.is_playing
                     val track = currentlyPlayingContext.item as Track
+                    trackId = track.id
+                    trackUri = track.uri
                     song = track.name
                     artist = track.artists[0].name
                     title = track.name
@@ -225,6 +250,93 @@ object SpotifyService {
         try {
             if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
                 spotifyApi.seekToPositionInCurrentlyPlayingTrack(progressInMsToGoTo).build().execute()
+            }
+        } catch (e: CompletionException) {
+            println("Error: " + e.cause!!.message)
+        } catch (e: CancellationException) {
+            println("Async operation cancelled.")
+        } catch (e: Exception) {
+            println("Error: " + e.message)
+        }
+    }
+
+    fun addRemoveCurrentTrackToLikedSongs(): AddRemoveCurrentTrackFromLibraryResponse {
+        lastTrackCheckedInLibrary = trackId
+
+        val checkResponse = checkCurrentTrackAlreadySaved()
+        return when (checkResponse) {
+            CheckSongSavedInLibraryResponse.REQUEST_FAILED -> {
+                println("Error: Failed to check if song is saved.")
+                return AddRemoveCurrentTrackFromLibraryResponse.REQUEST_FAILED
+            }
+            CheckSongSavedInLibraryResponse.SONG_SAVED -> {
+                try {
+                    if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
+                        spotifyApi.removeUsersSavedTracks(trackId).build().execute()
+                        return AddRemoveCurrentTrackFromLibraryResponse.CURRENT_TRACK_REMOVED_FROM_LIBRARY
+                    }
+                } catch (e: CompletionException) {
+                    println("Error: " + e.cause!!.message)
+                } catch (e: CancellationException) {
+                    println("Async operation cancelled.")
+                } catch (e: Exception) {
+                    println("Error: " + e.message)
+                }
+                return AddRemoveCurrentTrackFromLibraryResponse.REQUEST_FAILED
+            }
+            CheckSongSavedInLibraryResponse.SONG_NOT_SAVED -> {
+                try {
+                    if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
+                        spotifyApi.saveTracksForUser(trackId).build().execute()
+                        return AddRemoveCurrentTrackFromLibraryResponse.CURRENT_TRACK_ADDED_TO_LIBRARY
+                    }
+                } catch (e: CompletionException) {
+                    println("Error: " + e.cause!!.message)
+                } catch (e: CancellationException) {
+                    println("Async operation cancelled.")
+                } catch (e: Exception) {
+                    println("Error: " + e.message)
+                }
+                return AddRemoveCurrentTrackFromLibraryResponse.REQUEST_FAILED
+            }
+        }
+    }
+
+    fun checkCurrentTrackAlreadySaved(): CheckSongSavedInLibraryResponse {
+        try {
+            if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
+                val isSaved = spotifyApi.checkUsersSavedTracks(trackId).build().execute()[0]
+                if (isSaved) return CheckSongSavedInLibraryResponse.SONG_SAVED
+                return CheckSongSavedInLibraryResponse.SONG_NOT_SAVED
+            }
+        } catch (e: CompletionException) {
+            println("Error: " + e.cause!!.message)
+        } catch (e: CancellationException) {
+            println("Async operation cancelled.")
+        } catch (e: Exception) {
+            println("Error: " + e.message)
+        }
+        return CheckSongSavedInLibraryResponse.REQUEST_FAILED
+    }
+
+    fun getPlaylists() {
+        try {
+            if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
+                playlists = spotifyApi.listOfCurrentUsersPlaylists.build().execute()
+            }
+        } catch (e: CompletionException) {
+            println("Error: " + e.cause!!.message)
+        } catch (e: CancellationException) {
+            println("Async operation cancelled.")
+        } catch (e: Exception) {
+            println("Error: " + e.message)
+        }
+    }
+
+    fun addToPlaylist(playlistId: String) {
+        try {
+            if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
+                spotifyApi.addItemsToPlaylist(playlistId, arrayOf(trackUri)).build().execute()
             }
         } catch (e: CompletionException) {
             println("Error: " + e.cause!!.message)

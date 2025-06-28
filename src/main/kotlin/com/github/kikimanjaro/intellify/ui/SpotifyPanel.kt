@@ -1,7 +1,11 @@
 package com.github.kikimanjaro.intellify.ui
 
+import com.github.kikimanjaro.intellify.services.AddRemoveCurrentTrackFromLibraryResponse
+import com.github.kikimanjaro.intellify.services.CheckSongSavedInLibraryResponse
 import com.github.kikimanjaro.intellify.services.SpotifyService
 import com.github.kikimanjaro.intellify.services.SpotifyStatusUpdater
+import com.jetbrains.rd.swing.escPressedSource
+import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified
 import java.awt.*
 import java.awt.geom.RoundRectangle2D
 import java.awt.image.BufferedImage
@@ -18,6 +22,7 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
     private val playPauseButton: JButton
     private val prevButton: JButton
     private val nextButton: JButton
+    private val addRemoveFromLibraryButton: JButton
 
     private val artistNameLabel: JLabel
     private val songNameLabel: JLabel
@@ -28,12 +33,7 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
     private val slider: JSlider
 
     init {
-        val image: BufferedImage = ImageIO.read(URL(SpotifyService.imageUrl))
-        val scaledImage = image.getScaledInstance(customWidth, customHeight, Image.SCALE_SMOOTH)
-
-        imageIcon = ImageIcon(scaledImage)
-        imageLabel = JLabel(imageIcon)
-
+        // Title Panel
         artistNameLabel = JLabel(SpotifyService.artist, JLabel.CENTER)
         artistNameLabel.setFont(artistNameLabel.getFont().deriveFont(Font.BOLD, 14f));
         songNameLabel = JLabel(SpotifyService.song, JLabel.CENTER)
@@ -42,6 +42,14 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
         titlePanel.add(artistNameLabel, BorderLayout.NORTH)
         titlePanel.add(songNameLabel, BorderLayout.SOUTH)
 
+        // Image Panel
+        val image: BufferedImage = ImageIO.read(URL(SpotifyService.imageUrl))
+        val scaledImage = image.getScaledInstance(customWidth, customHeight, Image.SCALE_SMOOTH)
+
+        imageIcon = ImageIcon(scaledImage)
+        imageLabel = JLabel(imageIcon)
+
+        // Button Panel
         val buttonPanel = JPanel()
         buttonPanel.layout = BorderLayout()
         buttonPanel.isOpaque = false
@@ -93,13 +101,75 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
         buttonPanel.add(playPauseButton, BorderLayout.CENTER)
         buttonPanel.add(nextButton, BorderLayout.EAST)
 
+        val playlistPanel = JPanel()
+        playlistPanel.layout = BorderLayout()
+        playlistPanel.isOpaque = false
+
+        val playlistsButton = JButton(spotifyStatusUpdater.playlistsIcon)
+        playlistsButton.addActionListener {
+            openPlaylists()
+            update()
+        }
+
+        addRemoveFromLibraryButton = JButton(spotifyStatusUpdater.addIcon)
+        addRemoveFromLibraryButton.addActionListener {
+            addRemoveCurrentTrackToLikedSongs()
+            update()
+        }
+
+        // Bottom Panel
         val bottomPanel = JPanel(BorderLayout())
         bottomPanel.add(slider, BorderLayout.NORTH)
         bottomPanel.add(buttonPanel, BorderLayout.CENTER)
+        bottomPanel.add(playlistsButton, BorderLayout.WEST)
+        bottomPanel.add(addRemoveFromLibraryButton, BorderLayout.EAST)
 
+        // Full layout
         add(titlePanel, BorderLayout.NORTH)
         add(imageLabel, BorderLayout.CENTER)
         add(bottomPanel, BorderLayout.SOUTH)
+    }
+
+    private fun openPlaylists() {
+        val playlists = SpotifyService.playlists?.items as Array<PlaylistSimplified>?
+
+        if ((playlists == null) || playlists.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No playlists found.", "Playlists", JOptionPane.INFORMATION_MESSAGE)
+            return
+        }
+
+        val playlistMenu = JPopupMenu()
+        playlists.forEach { playlist: PlaylistSimplified ->
+            val menuItem = JMenuItem(playlist.name)
+            menuItem.addActionListener {
+                 openPlaylist(playlistMenu, playlist.id)
+            }
+            playlistMenu.add(menuItem)
+        }
+
+        playlistMenu.show(this, 0, 0)
+    }
+
+    private fun addRemoveCurrentTrackToLikedSongs() {
+        val addRemoveResponse = SpotifyService.addRemoveCurrentTrackToLikedSongs()
+        when (addRemoveResponse) {
+            AddRemoveCurrentTrackFromLibraryResponse.CURRENT_TRACK_ADDED_TO_LIBRARY ->
+                addRemoveFromLibraryButton.icon = spotifyStatusUpdater.greenCheckIcon
+
+            AddRemoveCurrentTrackFromLibraryResponse.CURRENT_TRACK_REMOVED_FROM_LIBRARY ->
+                addRemoveFromLibraryButton.icon = spotifyStatusUpdater.addIcon
+
+            AddRemoveCurrentTrackFromLibraryResponse.REQUEST_FAILED ->
+                println("Error: Failed to add / remove song from library")
+        }
+    }
+
+    private fun openPlaylist(playlistMenu: JPopupMenu, playlistId: String) {
+        // Logic to open the selected playlist
+        if (playlistMenu.isVisible)
+            playlistMenu.setVisible(false)
+        // val songsForPlaylist = SpotifyService.songsForPlaylist(playlistId)
+        update()
     }
 
     fun update() {
@@ -120,6 +190,14 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
         }
 
         slider.value = SpotifyService.progressInMs
+
+        if (SpotifyService.trackId != "" && SpotifyService.lastTrackCheckedInLibrary != SpotifyService.trackId) {
+            when (SpotifyService.checkCurrentTrackAlreadySaved())  {
+                CheckSongSavedInLibraryResponse.SONG_NOT_SAVED -> addRemoveFromLibraryButton.icon = spotifyStatusUpdater.addIcon
+                CheckSongSavedInLibraryResponse.SONG_SAVED -> addRemoveFromLibraryButton.icon = spotifyStatusUpdater.greenCheckIcon
+                else -> println("Error: Failed to check if song is in library...")
+            }
+        }
     }
 }
 
