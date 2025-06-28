@@ -14,6 +14,7 @@ import se.michaelthelin.spotify.enums.AuthorizationScope
 import se.michaelthelin.spotify.exceptions.detailed.UnauthorizedException
 import se.michaelthelin.spotify.model_objects.specification.Paging
 import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified
+import se.michaelthelin.spotify.model_objects.specification.PlaylistTrack
 import se.michaelthelin.spotify.model_objects.specification.Track
 import se.michaelthelin.spotify.requests.authorization.authorization_code.AuthorizationCodeUriRequest
 import java.io.BufferedReader
@@ -74,8 +75,6 @@ object SpotifyService {
     var song = ""
     var imageUrl = ""
     var lastTrackCheckedInLibrary = ""
-
-    var playlists : Paging<PlaylistSimplified>? = null
 
     var durationMs = 0
     var progressInMs = 0
@@ -190,161 +189,125 @@ object SpotifyService {
         }
     }
 
-    fun pauseTrack() {
-        try {
+    private fun <T, R> syncApiRequestLambda(fn: (T?) -> R?, args: T?): R? {
+        return try {
             if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
-                spotifyApi.pauseUsersPlayback().build().execute()
+                if (args != null) {
+                    return fn(args)
+                } else {
+                    return fn(null)
+                }
+            } else {
+                null
             }
         } catch (e: CompletionException) {
             println("Error: " + e.cause!!.message)
+            null
         } catch (e: CancellationException) {
             println("Async operation cancelled.")
+            null
         } catch (e: Exception) {
             println("Error: " + e.message)
+            null
         }
+    }
+
+    fun playTrack(selectedTrackUri: String) {
+        syncApiRequestLambda(
+            { uri -> spotifyApi.addItemToUsersPlaybackQueue(uri).build().execute() },
+            selectedTrackUri
+        )
+    }
+
+    fun pauseTrack() {
+        syncApiRequestLambda(
+            { _ -> spotifyApi.pauseUsersPlayback().build().execute() },
+            null
+        )
     }
 
     fun startTrack() {
-        try {
-            if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
-                spotifyApi.startResumeUsersPlayback().build().execute()
-            }
-        } catch (e: CompletionException) {
-            println("Error: " + e.cause!!.message)
-        } catch (e: CancellationException) {
-            println("Async operation cancelled.")
-        } catch (e: Exception) {
-            println("Error: " + e.message)
-        }
+        syncApiRequestLambda(
+            { _ -> spotifyApi.startResumeUsersPlayback().build().execute() },
+            null
+        )
     }
 
     fun nextTrack() {
-        try {
-            if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
-                spotifyApi.skipUsersPlaybackToNextTrack().build().execute()
-            }
-        } catch (e: CompletionException) {
-            println("Error: " + e.cause!!.message)
-        } catch (e: CancellationException) {
-            println("Async operation cancelled.")
-        } catch (e: Exception) {
-            println("Error: " + e.message)
-        }
+        syncApiRequestLambda(
+            { _ -> spotifyApi.skipUsersPlaybackToNextTrack().build().execute() },
+            null
+        )
     }
 
     fun prevTrack() {
-        try {
-            if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
-                spotifyApi.skipUsersPlaybackToPreviousTrack().build().execute()
-            }
-        } catch (e: CompletionException) {
-            println("Error: " + e.cause!!.message)
-        } catch (e: CancellationException) {
-            println("Async operation cancelled.")
-        } catch (e: Exception) {
-            println("Error: " + e.message)
-        }
+        syncApiRequestLambda(
+            { _ -> spotifyApi.skipUsersPlaybackToPreviousTrack().build().execute() },
+            null
+        )
     }
 
     fun setProgress(progressInMsToGoTo: Int) {
-        try {
-            if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
-                spotifyApi.seekToPositionInCurrentlyPlayingTrack(progressInMsToGoTo).build().execute()
-            }
-        } catch (e: CompletionException) {
-            println("Error: " + e.cause!!.message)
-        } catch (e: CancellationException) {
-            println("Async operation cancelled.")
-        } catch (e: Exception) {
-            println("Error: " + e.message)
-        }
+        syncApiRequestLambda(
+            { progress -> spotifyApi.seekToPositionInCurrentlyPlayingTrack(progress!!).build().execute()},
+            progressInMsToGoTo
+        )
     }
 
     fun addRemoveCurrentTrackToLikedSongs(): AddRemoveCurrentTrackFromLibraryResponse {
         lastTrackCheckedInLibrary = trackId
 
         val checkResponse = checkCurrentTrackAlreadySaved()
-        return when (checkResponse) {
+        when (checkResponse) {
             CheckSongSavedInLibraryResponse.REQUEST_FAILED -> {
                 println("Error: Failed to check if song is saved.")
                 return AddRemoveCurrentTrackFromLibraryResponse.REQUEST_FAILED
             }
             CheckSongSavedInLibraryResponse.SONG_SAVED -> {
-                try {
-                    if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
-                        spotifyApi.removeUsersSavedTracks(trackId).build().execute()
-                        return AddRemoveCurrentTrackFromLibraryResponse.CURRENT_TRACK_REMOVED_FROM_LIBRARY
-                    }
-                } catch (e: CompletionException) {
-                    println("Error: " + e.cause!!.message)
-                } catch (e: CancellationException) {
-                    println("Async operation cancelled.")
-                } catch (e: Exception) {
-                    println("Error: " + e.message)
-                }
-                return AddRemoveCurrentTrackFromLibraryResponse.REQUEST_FAILED
+                syncApiRequestLambda(
+                    { id -> spotifyApi.removeUsersSavedTracks(id).build().execute() },
+                    trackId
+                )
+                return AddRemoveCurrentTrackFromLibraryResponse.CURRENT_TRACK_REMOVED_FROM_LIBRARY
             }
             CheckSongSavedInLibraryResponse.SONG_NOT_SAVED -> {
-                try {
-                    if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
-                        spotifyApi.saveTracksForUser(trackId).build().execute()
-                        return AddRemoveCurrentTrackFromLibraryResponse.CURRENT_TRACK_ADDED_TO_LIBRARY
-                    }
-                } catch (e: CompletionException) {
-                    println("Error: " + e.cause!!.message)
-                } catch (e: CancellationException) {
-                    println("Async operation cancelled.")
-                } catch (e: Exception) {
-                    println("Error: " + e.message)
-                }
-                return AddRemoveCurrentTrackFromLibraryResponse.REQUEST_FAILED
+                syncApiRequestLambda(
+                    { id -> spotifyApi.saveTracksForUser(id).build().execute() },
+                    trackId
+                )
+                return AddRemoveCurrentTrackFromLibraryResponse.CURRENT_TRACK_ADDED_TO_LIBRARY
             }
         }
     }
 
     fun checkCurrentTrackAlreadySaved(): CheckSongSavedInLibraryResponse {
-        try {
-            if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
-                val isSaved = spotifyApi.checkUsersSavedTracks(trackId).build().execute()[0]
-                if (isSaved) return CheckSongSavedInLibraryResponse.SONG_SAVED
-                return CheckSongSavedInLibraryResponse.SONG_NOT_SAVED
-            }
-        } catch (e: CompletionException) {
-            println("Error: " + e.cause!!.message)
-        } catch (e: CancellationException) {
-            println("Async operation cancelled.")
-        } catch (e: Exception) {
-            println("Error: " + e.message)
-        }
-        return CheckSongSavedInLibraryResponse.REQUEST_FAILED
+        val isSaved = syncApiRequestLambda(
+            { id -> spotifyApi.checkUsersSavedTracks(id).build().execute() },
+            trackId
+        )?.get(0)
+        if (isSaved == true) return CheckSongSavedInLibraryResponse.SONG_SAVED  // isSaved == true since it may be null
+        return CheckSongSavedInLibraryResponse.SONG_NOT_SAVED
     }
 
-    fun getPlaylists() {
-        try {
-            if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
-                playlists = spotifyApi.listOfCurrentUsersPlaylists.build().execute()
-            }
-        } catch (e: CompletionException) {
-            println("Error: " + e.cause!!.message)
-        } catch (e: CancellationException) {
-            println("Async operation cancelled.")
-        } catch (e: Exception) {
-            println("Error: " + e.message)
-        }
+    fun getPlaylists(): Paging<PlaylistSimplified>?{
+        return syncApiRequestLambda(
+            { _ -> spotifyApi.listOfCurrentUsersPlaylists.build().execute() },
+            null
+        )
+    }
+
+    fun getSongsForPlaylist(playlistId: String): Paging<PlaylistTrack>? {
+        return syncApiRequestLambda(
+            { id -> spotifyApi.getPlaylistsItems(id).build().execute() },
+            playlistId
+        )
     }
 
     fun addToPlaylist(playlistId: String) {
-        try {
-            if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
-                spotifyApi.addItemsToPlaylist(playlistId, arrayOf(trackUri)).build().execute()
-            }
-        } catch (e: CompletionException) {
-            println("Error: " + e.cause!!.message)
-        } catch (e: CancellationException) {
-            println("Async operation cancelled.")
-        } catch (e: Exception) {
-            println("Error: " + e.message)
-        }
+        syncApiRequestLambda(
+            { ids -> spotifyApi.addItemsToPlaylist(ids!![0], arrayOf(ids!![1])).build().execute() },
+            arrayOf(playlistId, trackId)
+        )
     }
 
     fun openServer() {

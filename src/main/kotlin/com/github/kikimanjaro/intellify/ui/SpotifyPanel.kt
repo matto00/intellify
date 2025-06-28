@@ -5,7 +5,10 @@ import com.github.kikimanjaro.intellify.services.CheckSongSavedInLibraryResponse
 import com.github.kikimanjaro.intellify.services.SpotifyService
 import com.github.kikimanjaro.intellify.services.SpotifyStatusUpdater
 import com.jetbrains.rd.swing.escPressedSource
+import se.michaelthelin.spotify.model_objects.specification.Paging
 import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified
+import se.michaelthelin.spotify.model_objects.specification.PlaylistTrack
+import se.michaelthelin.spotify.model_objects.specification.Track
 import java.awt.*
 import java.awt.geom.RoundRectangle2D
 import java.awt.image.BufferedImage
@@ -131,9 +134,11 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
     }
 
     private fun openPlaylists() {
-        val playlists = SpotifyService.playlists?.items as Array<PlaylistSimplified>?
+        val playlists = SpotifyService.getPlaylists()?.items as Array<PlaylistSimplified>?
 
-        if ((playlists == null) || playlists.isEmpty()) {
+        println(playlists)
+
+        if (playlists.isNullOrEmpty()) {
             JOptionPane.showMessageDialog(this, "No playlists found.", "Playlists", JOptionPane.INFORMATION_MESSAGE)
             return
         }
@@ -165,11 +170,31 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
     }
 
     private fun openPlaylist(playlistMenu: JPopupMenu, playlistId: String) {
-        // Logic to open the selected playlist
+        val songsForPlaylist = SpotifyService.getSongsForPlaylist(playlistId)?.items
+        if (songsForPlaylist.isNullOrEmpty()) {
+            JOptionPane.showMessageDialog(this, "No songs found in this playlist.", "Playlists", JOptionPane.INFORMATION_MESSAGE)
+            return
+        }
+
+        val playlistSongMenu = JPopupMenu()
+        songsForPlaylist.forEach { playlistTrack: PlaylistTrack ->
+            val track = playlistTrack.track
+            val menuItem = JMenuItem(track.name)
+            menuItem.addActionListener {
+                playTrack(playlistSongMenu, track.uri)
+            }
+            playlistSongMenu.add(menuItem)
+        }
+
         if (playlistMenu.isVisible)
             playlistMenu.setVisible(false)
-        // val songsForPlaylist = SpotifyService.songsForPlaylist(playlistId)
-        update()
+    }
+
+    fun playTrack(playlistSongMenu: JPopupMenu, trackUri: String) {
+        SpotifyService.playTrack(trackUri)
+
+        if (playlistSongMenu.isVisible)
+            playlistSongMenu.setVisible(false)
     }
 
     fun update() {
@@ -193,8 +218,12 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
 
         if (SpotifyService.trackId != "" && SpotifyService.lastTrackCheckedInLibrary != SpotifyService.trackId) {
             when (SpotifyService.checkCurrentTrackAlreadySaved())  {
-                CheckSongSavedInLibraryResponse.SONG_NOT_SAVED -> addRemoveFromLibraryButton.icon = spotifyStatusUpdater.addIcon
-                CheckSongSavedInLibraryResponse.SONG_SAVED -> addRemoveFromLibraryButton.icon = spotifyStatusUpdater.greenCheckIcon
+                CheckSongSavedInLibraryResponse.SONG_NOT_SAVED ->
+                    addRemoveFromLibraryButton.icon = spotifyStatusUpdater.addIcon
+
+                CheckSongSavedInLibraryResponse.SONG_SAVED ->
+                    addRemoveFromLibraryButton.icon = spotifyStatusUpdater.greenCheckIcon
+
                 else -> println("Error: Failed to check if song is in library...")
             }
         }
@@ -236,7 +265,7 @@ private class CustomSliderUI(b: JSlider?) : BasicSliderUI(b) {
     }
 
     private val isHorizontal: Boolean
-        private get() = slider.orientation == JSlider.HORIZONTAL
+        get() = slider.orientation == JSlider.HORIZONTAL
 
     override fun paint(g: Graphics, c: JComponent) {
         (g as Graphics2D).setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
