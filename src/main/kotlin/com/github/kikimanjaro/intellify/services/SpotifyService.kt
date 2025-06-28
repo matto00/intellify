@@ -81,6 +81,7 @@ object SpotifyService {
     var progressInMs = 0
 
     var isPlaying = false
+    var isShuffling = false
 
     fun refreshAccessTokenWithRefreshToken() {
         try {
@@ -268,6 +269,14 @@ object SpotifyService {
         )
     }
 
+    fun toggleShuffle() {
+        isShuffling = !isShuffling
+        syncApiRequestLambda(
+            { shuffle -> spotifyApi.toggleShuffleForUsersPlayback(shuffle!!).build().execute() },
+            isShuffling
+        )
+    }
+
     fun addRemoveCurrentTrackToLikedSongs(): AddRemoveCurrentTrackFromLibraryResponse {
         lastTrackCheckedInLibrary = trackId
 
@@ -312,7 +321,7 @@ object SpotifyService {
         nextTrack()
     }
 
-    fun getPlaylists(): Paging<PlaylistSimplified>?{
+    fun getPlaylists(): Paging<PlaylistSimplified>? {
         return syncApiRequestLambda(
             { _ -> spotifyApi.listOfCurrentUsersPlaylists.build().execute() },
             null

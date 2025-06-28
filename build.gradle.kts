@@ -78,6 +78,12 @@ tasks {
         gradleVersion = properties("gradleVersion")
     }
 
+    tasks {
+        buildPlugin {
+            archiveFileName.set("intellify-${project.version}.jar")
+        }
+    }
+
 //    patchPluginXml {
 //        version.set(properties("pluginVersion"))
 //        sinceBuild.set(properties("pluginSinceBuild"))

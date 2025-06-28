@@ -15,6 +15,7 @@ import java.awt.image.BufferedImage
 import java.net.URL
 import javax.imageio.ImageIO
 import javax.swing.*
+import javax.swing.border.Border
 import javax.swing.plaf.basic.BasicSliderUI
 
 
@@ -25,6 +26,7 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
     private val playPauseButton: JButton
     private val prevButton: JButton
     private val nextButton: JButton
+    private val shuffleToggleButton: JButton
     private val addRemoveFromLibraryButton: JButton
 
     private val artistNameLabel: JLabel
@@ -36,13 +38,24 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
     private val slider: JSlider
 
     init {
+        // Nav Panel
+        val topNavPanel = JPanel(BorderLayout())
+        val playlistsButton = JButton(spotifyStatusUpdater.playlistsIcon)
+        playlistsButton.addActionListener {
+            openPlaylists()
+            update()
+        }
+        topNavPanel.add(playlistsButton, BorderLayout.WEST)
+
+        val songPanel = JPanel(BorderLayout())
+
         // Title Panel
         artistNameLabel = JLabel(SpotifyService.artist, JLabel.CENTER)
         artistNameLabel.setFont(artistNameLabel.getFont().deriveFont(Font.BOLD, 14f));
         songNameLabel = JLabel(SpotifyService.song, JLabel.CENTER)
 
         titlePanel = JPanel(BorderLayout())
-        titlePanel.add(artistNameLabel, BorderLayout.NORTH)
+        titlePanel.add(artistNameLabel, BorderLayout.CENTER)
         titlePanel.add(songNameLabel, BorderLayout.SOUTH)
 
         // Image Panel
@@ -51,6 +64,9 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
 
         imageIcon = ImageIcon(scaledImage)
         imageLabel = JLabel(imageIcon)
+
+        songPanel.add(titlePanel, BorderLayout.NORTH)
+        songPanel.add(imageLabel, BorderLayout.CENTER)
 
         // Button Panel
         val buttonPanel = JPanel()
@@ -104,13 +120,13 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
         buttonPanel.add(playPauseButton, BorderLayout.CENTER)
         buttonPanel.add(nextButton, BorderLayout.EAST)
 
-        val playlistPanel = JPanel()
-        playlistPanel.layout = BorderLayout()
-        playlistPanel.isOpaque = false
-
-        val playlistsButton = JButton(spotifyStatusUpdater.playlistsIcon)
-        playlistsButton.addActionListener {
-            openPlaylists()
+        shuffleToggleButton = JButton(spotifyStatusUpdater.shuffleOff)
+        shuffleToggleButton.addActionListener {
+            SpotifyService.toggleShuffle()
+            when(SpotifyService.isShuffling) {
+                true -> shuffleToggleButton.icon = spotifyStatusUpdater.shuffleOn
+                false -> shuffleToggleButton.icon = spotifyStatusUpdater.shuffleOff
+            }
             update()
         }
 
@@ -124,50 +140,89 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
         val bottomPanel = JPanel(BorderLayout())
         bottomPanel.add(slider, BorderLayout.NORTH)
         bottomPanel.add(buttonPanel, BorderLayout.CENTER)
-        bottomPanel.add(playlistsButton, BorderLayout.WEST)
+        bottomPanel.add(shuffleToggleButton, BorderLayout.WEST)
         bottomPanel.add(addRemoveFromLibraryButton, BorderLayout.EAST)
 
         // Full layout
-        add(titlePanel, BorderLayout.NORTH)
-        add(imageLabel, BorderLayout.CENTER)
+        add(topNavPanel, BorderLayout.NORTH)
+        add(songPanel, BorderLayout.CENTER)
         add(bottomPanel, BorderLayout.SOUTH)
     }
 
     private fun openPlaylists() {
         val playlists = SpotifyService.getPlaylists()?.items as Array<PlaylistSimplified>?
 
-        println(playlists)
-
         if (playlists.isNullOrEmpty()) {
             JOptionPane.showMessageDialog(this, "No playlists found.", "Playlists", JOptionPane.INFORMATION_MESSAGE)
             return
         }
 
-        val playlistMenu = JPopupMenu()
+        val playlistsDialog = JDialog(SwingUtilities.getWindowAncestor(this), "Playlists", Dialog.ModalityType.APPLICATION_MODAL)
+
+        val playlistMenu = JPanel()
+        playlistMenu.layout = BorderLayout()
+
+        val contentPanel = JPanel()
+        contentPanel.layout = BoxLayout(contentPanel, BoxLayout.Y_AXIS)
+
+        val topBar = JPanel(BorderLayout())
+        topBar.preferredSize = Dimension(250, 32)
+
+        val titleLabel = JLabel("Select a playlist")
+        titleLabel.isEnabled = false
+        titleLabel.border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
+        titleLabel.horizontalAlignment = JLabel.CENTER
+        topBar.add(titleLabel, BorderLayout.CENTER)
+
+        playlistMenu.add(topBar)
+
         playlists.forEach { playlist: PlaylistSimplified ->
-            val panel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2))
-            val nameLabel = JLabel(playlist.name)
-            val openButton = JButton("Open")
+            val panel = JPanel(BorderLayout())
+            val truncatedName = if (playlist.name.length > 20) {
+                playlist.name.substring(0, 20) + "..."
+            } else {
+                playlist.name
+            }
+
+            val openButton = JButton(truncatedName)
             openButton.addActionListener {
-                openPlaylist(playlistMenu, playlist.id, playlist.name)
+                openPlaylist(playlistsDialog, playlistMenu, playlist)
             }
-            val playButton = JButton("Play")
+
+            val playButton = JButton(spotifyStatusUpdater.playIcon)
             playButton.addActionListener {
-                SpotifyService.playPlaylist(playlist.id)
+                SpotifyService.playPlaylist(playlist.uri)
                 playlistMenu.isVisible = false
+                playlistsDialog.dispose()
             }
-            panel.add(nameLabel)
-            panel.add(openButton)
-            panel.add(playButton)
+
+            panel.add(openButton, BorderLayout.CENTER)
+            panel.add(playButton, BorderLayout.EAST)
             panel.preferredSize = Dimension(250, 32)
+
             val menuItem = JMenuItem()
             menuItem.layout = BorderLayout()
             menuItem.add(panel, BorderLayout.CENTER)
             menuItem.preferredSize = Dimension(260, 40)
-            playlistMenu.add(menuItem)
+
+            contentPanel.add(menuItem)
         }
 
-        playlistMenu.show(this, 0, 0)
+        val scrollPane = JScrollPane(contentPanel)
+        scrollPane.preferredSize = Dimension(300, 400)
+        scrollPane.border = null
+        scrollPane.verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+
+        playlistMenu.add(scrollPane)
+
+        playlistsDialog.contentPane.add(playlistMenu)
+        playlistsDialog.pack()
+        playlistsDialog.setLocationRelativeTo(this)
+        playlistsDialog.isVisible = true
+
+        if (!playlistMenu.isVisible) {
+            playlistMenu.isVisible = true
+        }
     }
 
     private fun addRemoveCurrentTrackToLikedSongs() {
@@ -184,41 +239,78 @@ class SpotifyPanel(val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(Bord
         }
     }
 
-    private fun openPlaylist(playlistMenu: JPopupMenu, playlistId: String, playlistName: String) {
-        val songsForPlaylist = SpotifyService.getSongsForPlaylist(playlistId)?.items
+    private fun openPlaylist(playlistsDialog: JDialog, playlistMenu: JPanel, playlist: PlaylistSimplified) {
+        val songsForPlaylist = SpotifyService.getSongsForPlaylist(playlist.id)?.items
         if (songsForPlaylist.isNullOrEmpty()) {
             JOptionPane.showMessageDialog(this, "No songs found in this playlist.", "Playlists", JOptionPane.INFORMATION_MESSAGE)
             return
         }
 
-        val playlistSongMenu = JPopupMenu()
+        val playlistSongMenu = JPanel()
+        playlistSongMenu.layout = BoxLayout(playlistSongMenu, BoxLayout.Y_AXIS)
+
+        val contentPanel = JPanel()
+        contentPanel.layout = BoxLayout(contentPanel, BoxLayout.Y_AXIS)
+
+        val topBar = JPanel(BorderLayout())
+        topBar.preferredSize = Dimension(250, 32)
+
+        val backButton = JButton("Back")
+        backButton.addActionListener {
+            playlistSongMenu.isVisible = false
+            if (!playlistMenu.isVisible) {
+                playlistsDialog.dispose()
+                openPlaylists()
+            }
+        }
+        topBar.add(backButton, BorderLayout.WEST)
 
         val titleLabel = JLabel("Select a song")
         titleLabel.isEnabled = false
         titleLabel.border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
-        playlistSongMenu.add(titleLabel)
+        titleLabel.horizontalAlignment = JLabel.CENTER
+        topBar.add(titleLabel, BorderLayout.CENTER)
+
+        val playButton = JButton(spotifyStatusUpdater.playIcon)
+        playButton.addActionListener {
+            SpotifyService.playPlaylist(playlist.uri)
+            playlistSongMenu.isVisible = false
+            playlistsDialog.dispose()
+        }
+        topBar.add(playButton, BorderLayout.EAST)
+
+        playlistSongMenu.add(topBar)
 
         playlistSongMenu.add(JSeparator())
         songsForPlaylist.forEach { playlistTrack: PlaylistTrack ->
             val track = playlistTrack.track
             val menuItem = JMenuItem(track.name)
             menuItem.addActionListener {
-                playTrack(playlistSongMenu, track.uri)
+                playTrack(playlistsDialog, track.uri)
             }
-            playlistSongMenu.add(menuItem)
+            contentPanel.add(menuItem)
         }
 
-        if (playlistMenu.isVisible)
-            playlistMenu.setVisible(false)
+        val scrollPane = JScrollPane(contentPanel)
+        scrollPane.preferredSize = Dimension(300, 400)
+        scrollPane.border = null
+        scrollPane.verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
 
-        playlistSongMenu.show(this, 0, 0)
+        playlistSongMenu.add(scrollPane)
+
+        if (playlistMenu.isVisible)
+            playlistMenu.isVisible = false
+
+        playlistsDialog.title = playlist.name
+        playlistsDialog.contentPane = playlistSongMenu
+        playlistsDialog.pack()
+        playlistsDialog.setLocationRelativeTo(this)
+        playlistsDialog.isVisible = true
     }
 
-    private fun playTrack(playlistSongMenu: JPopupMenu, trackUri: String) {
+    private fun playTrack(playlistsDialog: JDialog, trackUri: String) {
         SpotifyService.playTrack(trackUri)
-
-        if (playlistSongMenu.isVisible)
-            playlistSongMenu.setVisible(false)
+        playlistsDialog.dispose()
     }
 
     fun update() {
