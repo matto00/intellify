@@ -8,6 +8,7 @@ import com.intellij.credentialStore.Credentials
 import com.intellij.ide.BrowserUtil
 import com.intellij.ide.passwordSafe.PasswordSafe
 import com.intellij.remoteServer.util.CloudConfigurationUtil.createCredentialAttributes
+import org.mozilla.javascript.ast.FunctionCall
 import se.michaelthelin.spotify.SpotifyApi
 import se.michaelthelin.spotify.SpotifyHttpManager
 import se.michaelthelin.spotify.enums.AuthorizationScope
@@ -25,6 +26,7 @@ import java.io.OutputStreamWriter
 import java.net.ServerSocket
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletionException
+import java.util.function.Function
 import kotlin.concurrent.thread
 
 enum class CheckSongSavedInLibraryResponse {
@@ -37,6 +39,22 @@ enum class AddRemoveCurrentTrackFromLibraryResponse {
     REQUEST_FAILED,
     CURRENT_TRACK_ADDED_TO_LIBRARY,
     CURRENT_TRACK_REMOVED_FROM_LIBRARY
+}
+
+data class RequestKey(val function: Any, val args: Any?)
+
+data class RequestMeta(val response: Any?, val lastCalled: Long)
+
+object RequestCache {
+    private val cache = mutableMapOf<Int, RequestMeta>()
+
+    fun put(key: RequestKey, meta: RequestMeta) {
+        cache[key.hashCode()] = meta
+    }
+
+    fun get(key: RequestKey): RequestMeta? {
+        return cache[key.hashCode()]
+    }
 }
 
 object SpotifyService {
@@ -191,13 +209,46 @@ object SpotifyService {
         }
     }
 
-    private fun <T, R> syncApiRequestLambda(fn: (T?) -> R?, args: T?): R? {
+    private fun <T, R> callLambdaAndUpdateCache(fn: (T?) -> R?, args: T?): R? {
+        val response = if (args != null) {
+            fn(args)
+        } else {
+            fn(null)
+        }
+
+        RequestCache.put(
+            RequestKey(fn.toString(), args),
+            RequestMeta(
+                response = response,
+                lastCalled = System.currentTimeMillis()
+            )
+        )
+        return response
+    }
+
+    private inline fun <T, reified R> syncApiRequestLambda(
+        noinline fn: (T?) -> R?,
+        args: T?,
+        debounceMillis: Long = 250L
+    ): R? {
         return try {
             if (code.isNotEmpty() && spotifyApi.accessToken != null && spotifyApi.accessToken.isNotEmpty()) {
-                if (args != null) {
-                    return fn(args)
-                } else {
-                    return fn(null)
+                val requestKey = RequestKey(fn.toString(), args)
+                return when (RequestCache.get(requestKey)) {
+                    // If the request is not cached, execute it and cache the response
+                    null -> {
+                        callLambdaAndUpdateCache(fn, args)
+                    }
+                    else -> {
+                        // Check if the request is debounced
+                        val meta = RequestCache.get(requestKey) as RequestMeta
+                        if (System.currentTimeMillis() - meta.lastCalled < debounceMillis) {
+                            meta.response as R?
+                        } else {
+                            // Update cache
+                            callLambdaAndUpdateCache(fn, args)
+                        }
+                    }
                 }
             } else {
                 null
@@ -312,32 +363,36 @@ object SpotifyService {
         return CheckSongSavedInLibraryResponse.SONG_NOT_SAVED
     }
 
-    fun playPlaylist(selectedPlaylistUri: String) {
-        // Workaround for the fact that Spotify API does not support playing a specific track by URI
+    fun setPlayContext(contextUri: String) {
         syncApiRequestLambda(
-            { uri ->  startResumePlaybackForUri(uri!!).build().execute() },
-            selectedPlaylistUri
+            { uri -> startResumePlaybackForUri(uri!!).build().execute() },
+            contextUri
         )
-        nextTrack()
+    }
+
+    fun playPlaylist(selectedPlaylistUri: String) {
+        setPlayContext(selectedPlaylistUri)
     }
 
     fun getPlaylists(): Paging<PlaylistSimplified>? {
         return syncApiRequestLambda(
             { _ -> spotifyApi.listOfCurrentUsersPlaylists.build().execute() },
-            null
+            null,
+            10000L // Debounce for 10 seconds to avoid too many requests
         )
     }
 
     fun getSongsForPlaylist(playlistId: String): Paging<PlaylistTrack>? {
         return syncApiRequestLambda(
             { id -> spotifyApi.getPlaylistsItems(id).build().execute() },
-            playlistId
+            playlistId,
+            10000L // Debounce for 10 seconds to avoid too many requests
         )
     }
 
     fun addToPlaylist(playlistId: String) {
         syncApiRequestLambda(
-            { ids -> spotifyApi.addItemsToPlaylist(ids!![0], arrayOf(ids!![1])).build().execute() },
+            { ids -> spotifyApi.addItemsToPlaylist(ids!![0], arrayOf(ids[1])).build().execute() },
             arrayOf(playlistId, trackId)
         )
     }

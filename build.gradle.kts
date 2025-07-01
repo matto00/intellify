@@ -7,9 +7,9 @@ plugins {
     // Java support
     id("java")
     // Kotlin support
-    id("org.jetbrains.kotlin.jvm") version "1.7.0"
+    id("org.jetbrains.kotlin.jvm") version "1.9.24"
     // Gradle IntelliJ Plugin
-    id("org.jetbrains.intellij") version "1.12.0"
+    id("org.jetbrains.intellij") version "1.17.0"
     // Gradle Changelog Plugin
     id("org.jetbrains.changelog") version "2.0.0"
     // Gradle Qodana Plugin
@@ -26,7 +26,7 @@ repositories {
 }
 
 dependencies {
-    api("se.michaelthelin.spotify:spotify-web-api-java:7.3.0") {
+    api("se.michaelthelin.spotify:spotify-web-api-java:9.2.0") {
         exclude(group = "org.slf4j", module = "slf4j-api")
     }
     compileOnly("org.slf4j:slf4j-api:1.7.36")
@@ -46,6 +46,7 @@ intellij {
 
     // Plugin Dependencies. Uses `platformPlugins` property from the gradle.properties file.
     plugins.set(properties("platformPlugins").split(',').map(String::trim).filter(String::isNotEmpty))
+    updateSinceUntilBuild.set(false)
 }
 
 // Configure Gradle Changelog Plugin - read more: https://github.com/JetBrains/gradle-changelog-plugin
@@ -78,10 +79,8 @@ tasks {
         gradleVersion = properties("gradleVersion")
     }
 
-    tasks {
-        buildPlugin {
-            archiveFileName.set("intellify-${project.version}.jar")
-        }
+    buildPlugin {
+        archiveFileName.set("intellify-${project.version}.zip")
     }
 
 //    patchPluginXml {
@@ -140,12 +139,4 @@ tasks.withType<Jar>() {
     configurations["runtimeClasspath"].forEach { file: File ->
         from(zipTree(file.absoluteFile))
     }
-}
-val compileKotlin: KotlinCompile by tasks
-compileKotlin.kotlinOptions {
-    jvmTarget = "1.8"
-}
-val compileTestKotlin: KotlinCompile by tasks
-compileTestKotlin.kotlinOptions {
-    jvmTarget = "1.8"
 }
