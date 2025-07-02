@@ -1,11 +1,12 @@
 package com.github.kikimanjaro.intellify.services
 
 import com.intellij.openapi.util.IconLoader
-import com.intellij.openapi.wm.StatusBar
+import com.intellij.openapi.wm.ToolWindow
 import javax.swing.Icon
+import javax.swing.SwingUtilities
 
-class SpotifyStatusUpdater(
-    private var statusBar: StatusBar?
+class SpotifyToolWindowStatusUpdater(
+    private var toolWindow: ToolWindow?
 ) : Runnable {
     private var stop = false
     private val spotifyActiveIcon: Icon = IconLoader.getIcon("/icons/spotify.svg", this::class.java)
@@ -35,8 +36,10 @@ class SpotifyStatusUpdater(
     }
 
     private fun updateUI() {
-        SpotifyService.currentPanel?.update()
-        statusBar?.updateWidget("Intellify")
+        SwingUtilities.invokeLater {
+            SpotifyService.currentPanel?.update()
+            toolWindow?.setIcon(currentIcon)
+        }
     }
 
     fun stop() {

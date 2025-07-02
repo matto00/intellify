@@ -2,13 +2,12 @@ package com.github.kikimanjaro.intellify.services
 
 import com.github.kikimanjaro.intellify.services.Secret.Companion.clientId
 import com.github.kikimanjaro.intellify.services.Secret.Companion.clientSecret
-import com.github.kikimanjaro.intellify.ui.SpotifyPanel
+import com.github.kikimanjaro.intellify.ui.SpotifyToolWindowPanel
 import com.intellij.credentialStore.CredentialAttributes
 import com.intellij.credentialStore.Credentials
 import com.intellij.ide.BrowserUtil
 import com.intellij.ide.passwordSafe.PasswordSafe
 import com.intellij.remoteServer.util.CloudConfigurationUtil.createCredentialAttributes
-import org.mozilla.javascript.ast.FunctionCall
 import se.michaelthelin.spotify.SpotifyApi
 import se.michaelthelin.spotify.SpotifyHttpManager
 import se.michaelthelin.spotify.enums.AuthorizationScope
@@ -26,7 +25,6 @@ import java.io.OutputStreamWriter
 import java.net.ServerSocket
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletionException
-import java.util.function.Function
 import kotlin.concurrent.thread
 
 enum class CheckSongSavedInLibraryResponse {
@@ -58,7 +56,7 @@ object RequestCache {
 }
 
 object SpotifyService {
-    var currentPanel: SpotifyPanel? = null
+    var currentPanel: SpotifyToolWindowPanel? = null
     private const val codeServiceName = "Intellify-code"
     private const val accesServiceName = "Intellify-acces"
     private const val refreshServiceName = "Intellify-refresh"
@@ -87,6 +85,16 @@ object SpotifyService {
             AuthorizationScope.PLAYLIST_MODIFY_PUBLIC,
         ).build()
     var code = retrieveCode()
+
+    private val codeServiceCredentialAttributes: CredentialAttributes?
+        get() = createCredentialAttributes(codeServiceName, "user")
+
+    private val accesServiceCredentialAttributes: CredentialAttributes?
+        get() = createCredentialAttributes(accesServiceName, "user")
+
+    private val refreshServiceCredentialAttributes: CredentialAttributes?
+        get() = createCredentialAttributes(refreshServiceName, "user")
+
     var trackId = ""
     var trackUri = ""
     var title = ""
@@ -458,37 +466,37 @@ object SpotifyService {
 
     private fun saveCode(newCode: String) {
         val credentialAttributes: CredentialAttributes? =
-            createCredentialAttributes(codeServiceName, "user") // see previous sample
+            codeServiceCredentialAttributes // see previous sample
         val credentials = Credentials(codeServiceName, newCode)
         PasswordSafe.instance.set(credentialAttributes!!, credentials)
     }
 
     private fun retrieveCode(): String {
-        val credentialAttributes = createCredentialAttributes(codeServiceName, "user")
+        val credentialAttributes = codeServiceCredentialAttributes
         return PasswordSafe.instance.getPassword(credentialAttributes!!) ?: ""
     }
 
     private fun saveAccessToken(token: String) {
         val credentialAttributes: CredentialAttributes? =
-            createCredentialAttributes(accesServiceName, "user") // see previous sample
+            accesServiceCredentialAttributes // see previous sample
         val credentials = Credentials(accesServiceName, token)
         PasswordSafe.instance.set(credentialAttributes!!, credentials)
     }
 
     private fun retrieveAccessToken(): String? {
-        val credentialAttributes = createCredentialAttributes(accesServiceName, "user")
+        val credentialAttributes = accesServiceCredentialAttributes
         return PasswordSafe.instance.getPassword(credentialAttributes!!)
     }
 
     private fun saveRefreshToken(token: String) {
         val credentialAttributes: CredentialAttributes? =
-            createCredentialAttributes(refreshServiceName, "user") // see previous sample
+            refreshServiceCredentialAttributes // see previous sample
         val credentials = Credentials(refreshServiceName, token)
         PasswordSafe.instance.set(credentialAttributes!!, credentials)
     }
 
     private fun retrieveRefreshToken(): String? {
-        val credentialAttributes = createCredentialAttributes(refreshServiceName, "user")
+        val credentialAttributes = refreshServiceCredentialAttributes
         return PasswordSafe.instance.getPassword(credentialAttributes!!)
     }
 }

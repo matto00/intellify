@@ -3,66 +3,81 @@ package com.github.kikimanjaro.intellify.ui
 import com.github.kikimanjaro.intellify.services.AddRemoveCurrentTrackFromLibraryResponse
 import com.github.kikimanjaro.intellify.services.CheckSongSavedInLibraryResponse
 import com.github.kikimanjaro.intellify.services.SpotifyService
-import com.github.kikimanjaro.intellify.services.SpotifyStatusUpdater
-import com.intellij.ui.util.maximumHeight
-import com.jetbrains.rd.swing.escPressedSource
-import se.michaelthelin.spotify.model_objects.specification.Paging
-import se.michaelthelin.spotify.model_objects.specification.PlaylistSimplified
-import se.michaelthelin.spotify.model_objects.specification.PlaylistTrack
-import se.michaelthelin.spotify.model_objects.specification.Track
+import com.github.kikimanjaro.intellify.services.SpotifyToolWindowStatusUpdater
+import com.intellij.util.ui.UIUtil
+import com.jetbrains.rd.util.URI
 import java.awt.*
 import java.awt.geom.RoundRectangle2D
 import java.awt.image.BufferedImage
 import java.net.URL
 import javax.imageio.ImageIO
 import javax.swing.*
-import javax.swing.border.Border
 import javax.swing.plaf.basic.BasicSliderUI
 
+class SpotifyCurrentTrackPanel(private val parent: SpotifyToolWindowPanel, private val spotifyToolWindowStatusUpdater: SpotifyToolWindowStatusUpdater): JPanel(BorderLayout()) {
+    private val customWidth = 400
+    private val customHeight = 400
 
-class SpotifyPanel(private val spotifyStatusUpdater: SpotifyStatusUpdater) : JPanel(BorderLayout()) {
-    val customWidth = 200
-    val customHeight = 200
+    private lateinit var playPauseButton: JButton
+    private lateinit var prevButton: JButton
+    private lateinit var nextButton: JButton
+    private lateinit var shuffleToggleButton: JButton
+    private lateinit var addRemoveFromLibraryButton: JButton
 
-    private val playPauseButton: JButton
-    private val prevButton: JButton
-    private val nextButton: JButton
-    private val shuffleToggleButton: JButton
-    private val addRemoveFromLibraryButton: JButton
+    private lateinit var artistNameLabel: JLabel
+    private lateinit var songNameLabel: JLabel
+    private lateinit var imageIcon: ImageIcon
+    private lateinit var imageLabel: JLabel
+    private lateinit var titlePanel: JPanel
 
-    private val artistNameLabel: JLabel
-    private val songNameLabel: JLabel
-    private val imageIcon: ImageIcon
-    private val imageLabel: JLabel
-    private val titlePanel: JPanel
-
-    private val slider: JSlider
-
-    private val playlistsPanel: SpotifyPlaylistsPanel = SpotifyPlaylistsPanel(this, spotifyStatusUpdater)
+    private lateinit var slider: JSlider
 
     init {
-        // Nav Panel
+        val topNavPanel = createTopNavPanel()
+        val songPanel = createSongPanel()
+        val bottomPanel = createBottomPanel()
+
+        // Full layout
+        add(topNavPanel, BorderLayout.NORTH)
+        add(songPanel, BorderLayout.CENTER)
+        add(bottomPanel, BorderLayout.SOUTH)
+    }
+
+    private fun createTopNavPanel(): JPanel {
         val topNavPanel = JPanel(BorderLayout())
-        val playlistsButton = JButton(spotifyStatusUpdater.playlistsIcon)
+        val playlistsButton = JButton(spotifyToolWindowStatusUpdater.playlistsIcon)
         playlistsButton.addActionListener {
-            playlistsPanel.openPlaylists()
+            parent.openPlaylists()
             update()
         }
         topNavPanel.add(playlistsButton, BorderLayout.WEST)
+        return topNavPanel
+    }
 
+    private fun createSongPanel(): JPanel {
         val songPanel = JPanel(BorderLayout())
 
         // Title Panel
         artistNameLabel = JLabel(SpotifyService.artist, JLabel.CENTER)
-        artistNameLabel.setFont(artistNameLabel.getFont().deriveFont(Font.BOLD, 14f));
         songNameLabel = JLabel(SpotifyService.song, JLabel.CENTER)
+        songNameLabel.setFont(songNameLabel.getFont().deriveFont(Font.BOLD, 14f));
 
         titlePanel = JPanel(BorderLayout())
-        titlePanel.add(artistNameLabel, BorderLayout.CENTER)
-        titlePanel.add(songNameLabel, BorderLayout.SOUTH)
+        titlePanel.add(songNameLabel, BorderLayout.CENTER)
+        titlePanel.add(artistNameLabel, BorderLayout.SOUTH)
 
         // Image Panel
-        val image: BufferedImage = ImageIO.read(URL(SpotifyService.imageUrl))
+        val image: BufferedImage = try {
+            if (SpotifyService.imageUrl.isNotEmpty()) {
+                ImageIO.read(URL(SpotifyService.imageUrl))
+            } else {
+                // Use a placeholder image if URL is empty
+                UIUtil.createImage(customWidth, customHeight, BufferedImage.TYPE_INT_ARGB)
+            }
+        } catch (e: Exception) {
+            // Handle invalid URL or loading error
+            UIUtil.createImage(customWidth, customHeight, BufferedImage.TYPE_INT_ARGB)
+        }
         val scaledImage = image.getScaledInstance(customWidth, customHeight, Image.SCALE_SMOOTH)
 
         imageIcon = ImageIcon(scaledImage)
@@ -71,16 +86,19 @@ class SpotifyPanel(private val spotifyStatusUpdater: SpotifyStatusUpdater) : JPa
         songPanel.add(titlePanel, BorderLayout.NORTH)
         songPanel.add(imageLabel, BorderLayout.CENTER)
 
-        // Button Panel
+        return songPanel
+    }
+
+    private fun createButtonPanel(): JPanel {
         val buttonPanel = JPanel()
         buttonPanel.layout = BorderLayout()
         buttonPanel.isOpaque = false
 
         playPauseButton = JButton()
         if (SpotifyService.isPlaying) {
-            playPauseButton.icon = spotifyStatusUpdater.pauseIcon
+            playPauseButton.icon = spotifyToolWindowStatusUpdater.pauseIcon
         } else {
-            playPauseButton.icon = spotifyStatusUpdater.playIcon
+            playPauseButton.icon = spotifyToolWindowStatusUpdater.playIcon
         }
         playPauseButton.addActionListener {
             if (SpotifyService.isPlaying) {
@@ -90,20 +108,32 @@ class SpotifyPanel(private val spotifyStatusUpdater: SpotifyStatusUpdater) : JPa
             }
             update()
         }
-        prevButton = JButton(spotifyStatusUpdater.prevIcon)
+        prevButton = JButton(spotifyToolWindowStatusUpdater.prevIcon)
         prevButton.addActionListener {
             SpotifyService.prevTrack()
             update()
         }
-        nextButton = JButton(spotifyStatusUpdater.nextIcon)
+        nextButton = JButton(spotifyToolWindowStatusUpdater.nextIcon)
         nextButton.addActionListener {
             SpotifyService.nextTrack()
             update()
         }
 
+
+        // Add the buttons to the button panel
+        buttonPanel.add(prevButton, BorderLayout.WEST)
+        buttonPanel.add(playPauseButton, BorderLayout.CENTER)
+        buttonPanel.add(nextButton, BorderLayout.EAST)
+
+        return buttonPanel
+    }
+
+    private fun createBottomPanel(): JPanel {
+        val buttonPanel = createButtonPanel()
+
         slider = object : JSlider(0, SpotifyService.durationMs) {
             override fun updateUI() {
-                setUI(CustomSliderUI(this));
+                setUI(CustomToolWindowSliderUI(this));
             }
         }
         slider.setBorder(BorderFactory.createEmptyBorder(6, 0, 4, 0));
@@ -118,22 +148,17 @@ class SpotifyPanel(private val spotifyStatusUpdater: SpotifyStatusUpdater) : JPa
             }
         })
 
-        // Add the buttons to the button panel
-        buttonPanel.add(prevButton, BorderLayout.WEST)
-        buttonPanel.add(playPauseButton, BorderLayout.CENTER)
-        buttonPanel.add(nextButton, BorderLayout.EAST)
-
-        shuffleToggleButton = JButton(spotifyStatusUpdater.shuffleOff)
+        shuffleToggleButton = JButton(spotifyToolWindowStatusUpdater.shuffleOff)
         shuffleToggleButton.addActionListener {
             SpotifyService.toggleShuffle()
             when (SpotifyService.isShuffling) {
-                true -> shuffleToggleButton.icon = spotifyStatusUpdater.shuffleOn
-                false -> shuffleToggleButton.icon = spotifyStatusUpdater.shuffleOff
+                true -> shuffleToggleButton.icon = spotifyToolWindowStatusUpdater.shuffleOn
+                false -> shuffleToggleButton.icon = spotifyToolWindowStatusUpdater.shuffleOff
             }
             update()
         }
 
-        addRemoveFromLibraryButton = JButton(spotifyStatusUpdater.addIcon)
+        addRemoveFromLibraryButton = JButton(spotifyToolWindowStatusUpdater.addIcon)
         addRemoveFromLibraryButton.addActionListener {
             addRemoveCurrentTrackToLikedSongs()
             update()
@@ -146,20 +171,17 @@ class SpotifyPanel(private val spotifyStatusUpdater: SpotifyStatusUpdater) : JPa
         bottomPanel.add(shuffleToggleButton, BorderLayout.WEST)
         bottomPanel.add(addRemoveFromLibraryButton, BorderLayout.EAST)
 
-        // Full layout
-        add(topNavPanel, BorderLayout.NORTH)
-        add(songPanel, BorderLayout.CENTER)
-        add(bottomPanel, BorderLayout.SOUTH)
+        return bottomPanel
     }
 
     private fun addRemoveCurrentTrackToLikedSongs() {
         val addRemoveResponse = SpotifyService.addRemoveCurrentTrackToLikedSongs()
         when (addRemoveResponse) {
             AddRemoveCurrentTrackFromLibraryResponse.CURRENT_TRACK_ADDED_TO_LIBRARY ->
-                addRemoveFromLibraryButton.icon = spotifyStatusUpdater.greenCheckIcon
+                addRemoveFromLibraryButton.icon = spotifyToolWindowStatusUpdater.greenCheckIcon
 
             AddRemoveCurrentTrackFromLibraryResponse.CURRENT_TRACK_REMOVED_FROM_LIBRARY ->
-                addRemoveFromLibraryButton.icon = spotifyStatusUpdater.addIcon
+                addRemoveFromLibraryButton.icon = spotifyToolWindowStatusUpdater.addIcon
 
             AddRemoveCurrentTrackFromLibraryResponse.REQUEST_FAILED ->
                 println("Error: Failed to add / remove song from library")
@@ -171,27 +193,40 @@ class SpotifyPanel(private val spotifyStatusUpdater: SpotifyStatusUpdater) : JPa
         songNameLabel.text = SpotifyService.song
         titlePanel.repaint()
 
-        val image: BufferedImage = ImageIO.read(URL(SpotifyService.imageUrl))
-        val scaledImage = image.getScaledInstance(customWidth, customHeight, Image.SCALE_SMOOTH)
+        val image: BufferedImage = try {
+            if (SpotifyService.imageUrl.isNotEmpty()) {
+                ImageIO.read(URL(SpotifyService.imageUrl))
+            } else {
+                // Use a placeholder image if URL is empty
+                UIUtil.createImage(customWidth, customHeight, BufferedImage.TYPE_INT_ARGB)
+            }
+        } catch (e: Exception) {
+            // Handle invalid URL or loading error
+            UIUtil.createImage(customWidth, customHeight, BufferedImage.TYPE_INT_ARGB)
+        }
+        val scaledImage = image.getScaledInstance(parent.maxWidth(), parent.maxHeight(), Image.SCALE_SMOOTH)
 
         imageIcon.image = scaledImage
         imageLabel.repaint()
 
         if (SpotifyService.isPlaying) {
-            playPauseButton.icon = spotifyStatusUpdater.pauseIcon
+            playPauseButton.icon = spotifyToolWindowStatusUpdater.pauseIcon
         } else {
-            playPauseButton.icon = spotifyStatusUpdater.playIcon
+            playPauseButton.icon = spotifyToolWindowStatusUpdater.playIcon
         }
 
         slider.value = SpotifyService.progressInMs
+        slider.maximum = SpotifyService.durationMs
+        slider.value = SpotifyService.progressInMs
+        slider.repaint()
 
         if (SpotifyService.trackId != "" && SpotifyService.lastTrackCheckedInLibrary != SpotifyService.trackId) {
             when (SpotifyService.checkCurrentTrackAlreadySaved())  {
                 CheckSongSavedInLibraryResponse.SONG_NOT_SAVED ->
-                    addRemoveFromLibraryButton.icon = spotifyStatusUpdater.addIcon
+                    addRemoveFromLibraryButton.icon = spotifyToolWindowStatusUpdater.addIcon
 
                 CheckSongSavedInLibraryResponse.SONG_SAVED ->
-                    addRemoveFromLibraryButton.icon = spotifyStatusUpdater.greenCheckIcon
+                    addRemoveFromLibraryButton.icon = spotifyToolWindowStatusUpdater.greenCheckIcon
 
                 else -> println("Error: Failed to check if song is in library...")
             }
@@ -199,7 +234,7 @@ class SpotifyPanel(private val spotifyStatusUpdater: SpotifyStatusUpdater) : JPa
     }
 }
 
-private class CustomSliderUI(b: JSlider?) : BasicSliderUI(b) {
+private class CustomToolWindowSliderUI(b: JSlider?) : BasicSliderUI(b) {
     private val trackShape = RoundRectangle2D.Float()
     override fun calculateTrackRect() {
         super.calculateTrackRect()
