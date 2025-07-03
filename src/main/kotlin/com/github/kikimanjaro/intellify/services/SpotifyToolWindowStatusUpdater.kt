@@ -1,5 +1,6 @@
 package com.github.kikimanjaro.intellify.services
 
+import com.github.kikimanjaro.intellify.ui.ImageFactory
 import com.intellij.openapi.util.IconLoader
 import com.intellij.openapi.wm.ToolWindow
 import javax.swing.Icon
@@ -37,6 +38,10 @@ class SpotifyToolWindowStatusUpdater(
 
     private fun updateUI() {
         SwingUtilities.invokeLater {
+            if (toolWindow == null || !toolWindow!!.isVisible) {
+                return@invokeLater
+            }
+            ImageFactory.updateCache()
             SpotifyService.currentPanel?.update()
             toolWindow?.setIcon(currentIcon)
         }

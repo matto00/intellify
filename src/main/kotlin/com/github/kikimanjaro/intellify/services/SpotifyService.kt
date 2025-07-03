@@ -190,7 +190,7 @@ object SpotifyService {
                     trackId = track.id
                     trackUri = track.uri
                     song = track.name
-                    artist = track.artists[0].name
+                    artist = track.artists.joinToString(", ") { it.name }
                     title = track.name
                     title += " - " + track.artists[0].name
                     durationMs = track.durationMs
@@ -382,19 +382,19 @@ object SpotifyService {
         setPlayContext(selectedPlaylistUri)
     }
 
-    fun getPlaylists(): Paging<PlaylistSimplified>? {
+    fun getPlaylists(offset: Int = 0, limit: Int = 10): Paging<PlaylistSimplified>? {
         return syncApiRequestLambda(
-            { _ -> spotifyApi.listOfCurrentUsersPlaylists.build().execute() },
+            { _ -> spotifyApi.listOfCurrentUsersPlaylists.offset(offset).limit(limit).build().execute() },
             null,
-            10000L // Debounce for 10 seconds to avoid too many requests
+            1000L // Debounce for 60 seconds to avoid too many requests
         )
     }
 
-    fun getSongsForPlaylist(playlistId: String): Paging<PlaylistTrack>? {
+    fun getSongsForPlaylist(playlistId: String, offset: Int? = 0, limit: Int = 50): Paging<PlaylistTrack>? {
         return syncApiRequestLambda(
-            { id -> spotifyApi.getPlaylistsItems(id).build().execute() },
+            { id -> spotifyApi.getPlaylistsItems(id).offset(offset).limit(limit).build().execute() },
             playlistId,
-            10000L // Debounce for 10 seconds to avoid too many requests
+            1000L // Debounce for 10 seconds to avoid too many requests
         )
     }
 

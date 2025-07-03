@@ -67,17 +67,7 @@ class SpotifyCurrentTrackPanel(private val parent: SpotifyToolWindowPanel, priva
         titlePanel.add(artistNameLabel, BorderLayout.SOUTH)
 
         // Image Panel
-        val image: BufferedImage = try {
-            if (SpotifyService.imageUrl.isNotEmpty()) {
-                ImageIO.read(URL(SpotifyService.imageUrl))
-            } else {
-                // Use a placeholder image if URL is empty
-                UIUtil.createImage(customWidth, customHeight, BufferedImage.TYPE_INT_ARGB)
-            }
-        } catch (e: Exception) {
-            // Handle invalid URL or loading error
-            UIUtil.createImage(customWidth, customHeight, BufferedImage.TYPE_INT_ARGB)
-        }
+        val image: BufferedImage = ImageFactory.getImage(SpotifyService.imageUrl)
         val scaledImage = image.getScaledInstance(customWidth, customHeight, Image.SCALE_SMOOTH)
 
         imageIcon = ImageIcon(scaledImage)
@@ -193,17 +183,7 @@ class SpotifyCurrentTrackPanel(private val parent: SpotifyToolWindowPanel, priva
         songNameLabel.text = SpotifyService.song
         titlePanel.repaint()
 
-        val image: BufferedImage = try {
-            if (SpotifyService.imageUrl.isNotEmpty()) {
-                ImageIO.read(URL(SpotifyService.imageUrl))
-            } else {
-                // Use a placeholder image if URL is empty
-                UIUtil.createImage(customWidth, customHeight, BufferedImage.TYPE_INT_ARGB)
-            }
-        } catch (e: Exception) {
-            // Handle invalid URL or loading error
-            UIUtil.createImage(customWidth, customHeight, BufferedImage.TYPE_INT_ARGB)
-        }
+        val image: BufferedImage = ImageFactory.getImage(SpotifyService.imageUrl)
         val scaledImage = image.getScaledInstance(parent.maxWidth(), parent.maxHeight(), Image.SCALE_SMOOTH)
 
         imageIcon.image = scaledImage
